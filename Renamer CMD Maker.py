@@ -38,12 +38,8 @@ if "%~1"=="" (
     exit /b
 )
 
-:: Ask once for the date preference for the whole batch
-echo Which date would you prefer to use for this batch?
-echo 1 - Metadata date (Date Taken)
-echo 2 - File creation date
-choice /c 12 /n /m "Enter 1 or 2: " 
-set "userChoice=%errorlevel%"
+:: Date is chosen automatically: metadata date (Date Taken) is used first.
+:: If metadata is missing, falls back to file creation date silently.
 
 :: Create a temporary file to store files with their dates
 set "tempFile=%temp%\\screenshot_sort_%random%.txt"
@@ -104,39 +100,29 @@ for /f "tokens=1,2 delims=|" %%D in (%sortedFile%) do (
     set "file=%%E"
     set "ext=%%~xE"
     set /a maxNum+=1
-    set "metadata_date="
-    set "dir_date="
+    set "final_date="
 
-    :: Get metadata date using exiftool for display
+    :: Try metadata date first (Date Taken)
     for /f "tokens=*" %%a in ('%exiftool% -DateTimeOriginal -d "%%d-%%m-%%Y" "!file!" 2^>nul ^| findstr /i "Date/Time Original"') do (
-        set "metadata_date=%%a"
+        set "final_date=%%a"
     )
 
     :: Clean up metadata_date 
-    if defined metadata_date (
-        set "metadata_date=!metadata_date:~25!"
-        set "metadata_date=!metadata_date: =!"
-        set "metadata_date=!metadata_date::=!"
+    if defined final_date (
+        set "final_date=!final_date:~25!"
+        set "final_date=!final_date: =!"
+        set "final_date=!final_date::=!"
     )
 
     :: Fallback to creation date if metadata is missing
-    if "!metadata_date!"=="" (
+    if "!final_date!"=="" (
         for /f "tokens=*" %%a in ('powershell -Command "(Get-Item '!file!').CreationTime.ToString('dd-MM-yyyy')"') do (
-            set "metadata_date=%%a"
+            set "final_date=%%a"
         )
     )
 
-    :: Get file creation date for display/option 2
-    for /f "tokens=*" %%a in ('powershell -Command "(Get-Item '!file!').CreationTime.ToString('dd-MM-yyyy')"') do (
-        set "dir_date=%%a"
-    )
-
-    :: Set the new name based on the initial choice
-    if !userChoice! equ 2 (
-        set "newName={custom_name} (!maxNum!) - !dir_date!!ext!"
-    ) else (
-        set "newName={custom_name} (!maxNum!) - !metadata_date!!ext!"
-    )
+    :: Build new name
+    set "newName={custom_name} (!maxNum!) - !final_date!!ext!"
 
     :: Copy and rename
     copy "!file!" "%~dp0!newName!" >nul
@@ -152,7 +138,7 @@ del "%sortedFile%"
 
 echo.
 echo Processing complete.
-timeout /t 5"""
+exit"""
     
     # Write the script to file
     try:
@@ -164,7 +150,8 @@ timeout /t 5"""
         print()
         print("Usage:")
         print("1. Drag and drop files onto the generated .cmd file")
-        print("2. Choose date preference (metadata or creation date)")
+        print("2. Files are automatically dated: metadata date (Date Taken) is used first,")
+        print("   falling back to file creation date if metadata is unavailable.")
         print("3. Files will be renamed in chronological order")
         print()
         
@@ -175,3 +162,4 @@ timeout /t 5"""
 
 if __name__ == "__main__":
     generate_renamer_script()
+
